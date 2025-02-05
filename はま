@@ -1,0 +1,146 @@
+exports.getRandomQuestion = async (req, res) => {
+  try {
+    const [rows] = await require('../config/db').query(
+      'SELECT id, question, answer, explanation, source_path FROM questions ORDER BY RAND() LIMIT 1'
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: '問題が見つかりません' });
+    }
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'データ取得エラー' });
+  }
+};
+
+
+
+!!
+router.get('/random', questionsController.getRandomQuestion);
+
+
+
+!!
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>クイズアプリ</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="container">
+    <h1>クイズアプリ</h1>
+    <div id="quiz">
+      <p id="question">問題を読み込んでいます...</p>
+      <button id="true-button">〇</button>
+      <button id="false-button">×</button>
+    </div>
+    <div id="result"></div>
+    <div id="explanation"></div>
+  </div>
+  <script src="index.js"></script>
+</body>
+</html>
+
+
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background-color: #f4f4f9;
+  color: #333;
+}
+
+.container {
+  max-width: 600px;
+  margin: 50px auto;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+button {
+  margin: 10px;
+  padding: 10px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#true-button {
+  background-color: #4caf50;
+  color: white;
+}
+
+#false-button {
+  background-color: #f44336;
+  color: white;
+}
+
+#result {
+  margin-top: 20px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+#explanation {
+  margin-top: 20px;
+  font-size: 14px;
+  color: #555;
+}
+
+
+const API_URL = 'http://localhost:5000/api/questions/random';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const questionEl = document.getElementById('question');
+  const trueButton = document.getElementById('true-button');
+  const falseButton = document.getElementById('false-button');
+  const resultEl = document.getElementById('result');
+  const explanationEl = document.getElementById('explanation');
+
+  let currentQuestion = null;
+
+  // ランダムな問題を取得する関数
+  async function fetchQuestion() {
+    try {
+      const response = await fetch(API_URL);
+      if (!response.ok) {
+        throw new Error('問題を取得できませんでした');
+      }
+      const data = await response.json();
+      currentQuestion = data;
+      questionEl.textContent = data.question;
+      resultEl.textContent = '';
+      explanationEl.innerHTML = '';
+    } catch (error) {
+      console.error(error);
+      questionEl.textContent = '問題を読み込めませんでした。';
+    }
+  }
+
+  // 回答処理
+  function checkAnswer(userAnswer) {
+    if (!currentQuestion) return;
+
+    const isCorrect = currentQuestion.answer === userAnswer;
+    resultEl.textContent = isCorrect ? '正解！' : '不正解...';
+
+    explanationEl.innerHTML = `
+      <p>${currentQuestion.explanation || '解説はありません。'}</p>
+      <p>参考: <a href="${currentQuestion.source_path}" target="_blank">${currentQuestion.source_path || 'なし'}</a></p>
+    `;
+
+    // 次の問題を数秒後にロード
+    setTimeout(fetchQuestion, 3000);
+  }
+
+  // ボタンのクリックイベント
+  trueButton.addEventListener('click', () => checkAnswer(1));
+  falseButton.addEventListener('click', () => checkAnswer(0));
+
+  // 初回ロード
+  fetchQuestion();
+});
