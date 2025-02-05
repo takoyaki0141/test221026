@@ -1,1 +1,150 @@
 
+public function showStatistic($userId) {
+    try {
+        $projects = $this->fetchProjects($userId);
+        $stats = $this->initializeStats();
+
+        foreach ($projects as $project) {
+            $this->categorizeProject($project, $userId, $stats);
+        }
+
+        $this->calculateOntimeRates($stats);
+
+        $statistic = [
+            'user_id' => $userId,
+            'client_project' => $stats['client'],
+            'contractor_project' => $stats['contractor'],
+            'self_project' => $stats['self'],
+            'all_task_amount' => $stats['all_task_amount'],
+            'no1_client' => $this->getNo1ClientOrContractor($userId, "contractor"),
+            'no1_contractor' => $this->getNo1ClientOrContractor($userId, "client"),
+        ];
+
+        return $statistic;
+
+    } catch (PDOException $e) {
+        return ["status" => "error", "message" => "フェッチ中にエラーが起きました: " . $e->getMessage()];
+    }
+}
+
+private function fetchProjects($userId) {
+    $sql = "SELECT * FROM project WHERE client_id = :user_id OR contractor_id = :user_id";
+    $stmt = $this->dbh->prepare($sql);
+    $stmt->execute([':user_id' => $userId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+private function initializeStats() {
+    return [
+        'client' => $this->initializeProjectStats(),
+        'contractor' => $this->initializeProjectStats(),
+        'self' => $this->initializeProjectStats(),
+        'all_task_amount' => 0
+    ];
+}
+
+private function initializeProjectStats() {
+    return [
+        'not_started' => 0,
+        'in_progress' => 0,
+        'completed' => 0,
+        'await_approval' => 0,
+        'delayed' => 0,
+        'margin_for_duedate' => 0,
+        'ontime_duedate_sum' => 0,
+        'ontime_duedate_rate' => 0,
+        'all_task_amount' => 0
+    ];
+}
+
+private function categorizeProject($project, $userId, &$stats) {
+    $progress = $project['progress_id'];
+    $clientId = $project['client_id'];
+    $contractorId = $project['contractor_id'];
+    $dueDate = $project['due_date'];
+    $finishedAt = $project['finished_at'];
+
+    if ($progress == 7) return; // スキップ: 削除済み
+
+    $stats['all_task_amount']++;
+    if ($clientId == $userId && $contractorId != $userId) {
+        $this->updateProjectStats($stats['client'], $progress, $dueDate, $finishedAt);
+    } elseif ($contractorId == $userId && $clientId != $userId) {
+        $this->updateProjectStats($stats['contractor'], $progress, $dueDate, $finishedAt);
+    } else {
+        $this->updateProjectStats($stats['self'], $progress, $dueDate, $finishedAt);
+    }
+}
+
+private function updateProjectStats(&$projectStats, $progress, $dueDate, $finishedAt) {
+    $projectStats['all_task_amount']++;
+    switch ($progress) {
+        case 0:
+            $projectStats['not_started']++;
+            break;
+        case 2:
+            $projectStats['in_progress']++;
+            break;
+        case 4:
+            $projectStats['await_approval']++;
+            break;
+        case 5:
+            $projectStats['completed']++;
+            $projectStats['margin_for_duedate'] += $this->calcLeftDays($dueDate, $finishedAt);
+            if ($finishedAt <= $dueDate) $projectStats['ontime_duedate_sum']++;
+            break;
+        case 6:
+            $projectStats['delayed']++;
+            break;
+    }
+}
+
+private function calculateOntimeRates(&$stats) {
+    foreach (['client', 'contractor', 'self'] as $role) {
+        $completed = $stats[$role]['completed'];
+        $ontimeSum = $stats[$role]['ontime_duedate_sum'];
+        $stats[$role]['ontime_duedate_rate'] = $completed ? ($ontimeSum / $completed) * 100 : 0;
+    }
+}
+
+private function calcLeftDays($dueDate, $finishedAt) {
+    $holidays = $this->calcSubtractDays($dueDate, $finishedAt);
+
+    $dueDate = new DateTime($dueDate);
+    $finishedAt = new DateTime($finishedAt);
+
+    $intervalDays = $dueDate->diff($finishedAt)->days - $holidays;
+    return $finishedAt > $dueDate ? -$intervalDays : $intervalDays;
+}
+
+private function calcSubtractDays(string $dueDate, string $finishedAt) {
+    try {
+        if ($finishedAt > $dueDate) [$dueDate, $finishedAt] = [$finishedAt, $dueDate];
+
+        $holidaysJsonFile = "../calendar/discoHolidays.json";
+        if (!file_exists($holidaysJsonFile)) return 0;
+
+        $holidaysArray = json_decode(file_get_contents($holidaysJsonFile));
+        return array_reduce($holidaysArray, function ($count, $holiday) use ($dueDate, $finishedAt) {
+            return $count + ($holiday <= $dueDate && $holiday >= $finishedAt ? 1 : 0);
+        }, 0);
+    } catch (Exception $e) {
+        return 0;
+    }
+}
+
+private function getNo1ClientOrContractor($userId, $userPosition) {
+    $opponentPos = $userPosition === "client" ? "contractor_id" : "client_id";
+    $userPos = $userPosition === "client" ? "client_id" : "contractor_id";
+
+    $sql = "SELECT $opponentPos 
+            FROM (SELECT $opponentPos, COUNT($opponentPos) AS cnt 
+                  FROM project WHERE $userPos = :user_id GROUP BY $opponentPos) temp 
+            WHERE temp.cnt = (SELECT MAX(cnt) 
+                              FROM (SELECT COUNT($opponentPos) AS cnt 
+                                    FROM project WHERE $userPos = :user_id GROUP BY $opponentPos) sub)";
+    $stmt = $this->dbh->prepare($sql);
+    $stmt->execute([':user_id' => $userId]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? $result[$opponentPos] : 0;
+}
