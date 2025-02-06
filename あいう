@@ -1,0 +1,263 @@
+questionmodel.js
+----
+
+const db = require('../db'); 
+
+class Question {
+    static async fetchRandom() {
+        const [rows] = await db.query('SELECT * FROM quiz WHERE is_deleted = 0 ORDER BY RAND() LIMIT 1');
+        return rows[0];
+    }
+
+    static async judge(id, userAnswer) {
+        const [rows] = await db.query('SELECT correct_answer FROM quiz WHERE id = ?', [id]);
+        if (rows.length === 0) return null;
+        return rows[0].correct_answer === userAnswer;
+    }
+
+    static async fetchById(id) {
+        const [rows] = await db.query('SELECT * FROM quiz WHERE id = ?', [id]);
+        return rows[0];
+    }
+}
+
+module.exports = Question;
+
+---
+questioncontroller.js
+
+const Question = require('../models/questionModel');
+
+exports.fetchRandom = async (req, res) => {
+    try {
+        const question = await Question.fetchRandom();
+        if (!question) return res.status(404).json({ error: 'クイズが見つかりません' });
+
+        res.json({
+            id: question.id,
+            question: question.question,
+            correct_answer: question.correct_answer,
+            wrong_answer: question.wrong_answer,
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'クイズ取得エラー' });
+    }
+};
+
+exports.judge = async (req, res) => {
+    try {
+        const { id, userAnswer } = req.body;
+        if (!id || userAnswer === undefined) return res.status(400).json({ error: 'IDと回答を送信してください' });
+
+        const isCorrect = await Question.judge(id, userAnswer);
+        if (isCorrect === null) return res.status(404).json({ error: '問題が見つかりません' });
+
+        const question = await Question.fetchById(id);
+        res.json({
+            isCorrect,
+            explanation: question.explanation,
+            href: question.href,
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: '正解判定エラー' });
+    }
+};
+
+---
+
+questionroute.js
+
+const express = require('express');
+const questionsController = require('../controllers/questionsController');
+
+const router = express.Router();
+
+router.get('/random', questionsController.fetchRandom);
+router.post('/judge', questionsController.judge);
+
+module.exports = router;
+
+
+---
+
+/* 全体のスタイル */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f7fa;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+h1 {
+    font-size: 2rem;
+    margin-bottom: 20px;
+    color: #2c3e50;
+}
+
+/* 問題文 */
+#question {
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* ボタンのスタイル */
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 10px;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+/* 結果表示 */
+#result {
+    font-size: 1.25rem;
+    margin-top: 20px;
+}
+
+#result.correct {
+    color: #2ecc71;
+}
+
+#result.incorrect {
+    color: #e74c3c;
+}
+
+/* 解説部分 */
+#explanation {
+    font-size: 1rem;
+    margin-top: 20px;
+    text-align: center;
+    color: #7f8c8d;
+}
+
+#explanation a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+#explanation a:hover {
+    text-decoration: underline;
+}
+
+/* 次に進むボタン */
+button#next-btn {
+    background-color: #27ae60;
+    margin-top: 20px;
+}
+
+button#next-btn:hover {
+    background-color: #2ecc71;
+}
+
+
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>クイズアプリ</title>
+    <link rel="stylesheet" href="styles.css"> <!-- CSSファイルをリンク -->
+</head>
+<body>
+    <h1>クイズ</h1>
+    <p id="question"></p>
+    <button id="true-btn"></button>
+    <button id="false-btn"></button>
+    <p id="result"></p>
+    <div id="explanation"></div>
+    <button id="next-btn" style="display: none;">次に進む</button>
+    <script src="script.js"></script>
+</body>
+</html>
+
+
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    const questionEl = document.getElementById('question');
+    const trueBtn = document.getElementById('true-btn');
+    const falseBtn = document.getElementById('false-btn');
+    const resultEl = document.getElementById('result');
+    const explanationEl = document.getElementById('explanation');
+    const nextBtn = document.getElementById('next-btn'); // 修正
+
+    let currentQuestion = null;
+
+    async function fetchRandomQuiz() {
+        try {
+            const response = await fetch(API_URL_FETCH_RANDOM);
+            if (!response.ok) throw new Error('問題を取得できませんでした');
+            const data = await response.json();
+            currentQuestion = data;
+
+            questionEl.textContent = data.question;
+            resultEl.textContent = '';
+            explanationEl.innerHTML = '';
+            nextBtn.style.display = 'none'; // 次に進むボタン非表示
+
+            const answers = [data.correct_answer, data.wrong_answer];
+            answers.sort(() => Math.random() - 0.5);
+            trueBtn.textContent = answers[0];
+            falseBtn.textContent = answers[1];
+        } catch (error) {
+            console.error(error);
+            questionEl.textContent = '問題を読み込めませんでした。';
+        }
+    }
+
+    async function checkAnswer(userAnswer) {
+        if (!currentQuestion) return;
+
+        try {
+            const response = await fetch(API_URL_JUDGE_ANSWER, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: currentQuestion.id, userAnswer }),
+            });
+
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+
+            resultEl.textContent = data.isCorrect ? '正解！！' : '不正解...';
+            resultEl.classList.add(data.isCorrect ? 'correct' : 'incorrect');
+            explanationEl.innerHTML = `
+                <p>${data.explanation || '解説はありません。'}</p>
+                <p>参考: <a href="${data.href}" target="_blank">${data.href || 'なし'}</a></p>
+            `;
+
+            nextBtn.style.display = 'block'; // 次に進むボタン表示
+        } catch (error) {
+            console.error(error);
+            resultEl.textContent = 'エラーが発生しました。';
+        }
+    }
+
+    trueBtn.addEventListener('click', () => checkAnswer(trueBtn.textContent));
+    falseBtn.addEventListener('click', () => checkAnswer(falseBtn.textContent));
+    nextBtn.addEventListener('click', fetchRandomQuiz);
+
+    fetchRandomQuiz();
+});
