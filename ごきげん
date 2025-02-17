@@ -1,0 +1,305 @@
+config/db.js
+
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+const connectDB = async () => {
+    try {
+        await mongoose.connect(process.env.MONGO_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true
+        });
+        console.log('MongoDB Connected...');
+    } catch (error) {
+        console.error('MongoDB connection failed:', error);
+        process.exit(1);
+    }
+};
+
+module.exports = connectDB;
+
+
+
+.env
+
+MONGO_URI=mongodb://127.0.0.1:27017/gantt_chart
+PORT=5000
+
+
+server.js
+
+const express = require('express');
+const cors = require('cors');
+const connectDB = require('./config/db');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+connectDB();
+
+app.use(cors());
+app.use(express.json());
+
+app.use('/api/projects', require('./routes/projectRoutes'));
+
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});
+
+
+models/Project.js
+
+const mongoose = require('mongoose');
+
+const ProjectSchema = new mongoose.Schema({
+    project_title: { type: String, required: true },
+    start_date: { type: Date, required: true },
+    finish_date: { type: Date, required: true },
+    created_at: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Project', ProjectSchema);
+
+
+controllers/projectController.js
+
+const Project = require('../models/Project');
+
+// プロジェクト作成
+exports.createProject = async (req, res) => {
+    try {
+        const project = new Project(req.body);
+        await project.save();
+        res.status(201).json(project);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// 全プロジェクト取得
+exports.getProjects = async (req, res) => {
+    try {
+        const projects = await Project.find();
+        res.json(projects);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// 特定プロジェクト取得
+exports.getProjectById = async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        res.json(project);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// プロジェクト更新
+exports.updateProject = async (req, res) => {
+    try {
+        const project = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        res.json(project);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// プロジェクト削除
+exports.deleteProject = async (req, res) => {
+    try {
+        const project = await Project.findByIdAndDelete(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        res.json({ message: 'Project deleted' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
+routes/projectRoutes.js
+
+const express = require('express');
+const router = express.Router();
+const projectController = require('../controllers/projectController');
+
+router.post('/', projectController.createProject);
+router.get('/', projectController.getProjects);
+router.get('/:id', projectController.getProjectById);
+router.put('/:id', projectController.updateProject);
+router.delete('/:id', projectController.deleteProject);
+
+module.exports = router;
+
+プロジェクト作成テスト
+curl -X POST http://localhost:5000/api/projects -H "Content-Type: application/json" -d '{"project_title":"Test Project", "start_date":"2024-02-01", "finish_date":"2024-03-01"}'
+
+変更
+curl -X PUT http://localhost:5000/api/projects/{id} -H "Content-Type: application/json" -d '{"project_title":"Updated Project"}'
+
+
+models/Task.js
+
+const mongoose = require('mongoose');
+
+const TaskSchema = new mongoose.Schema({
+    project_id: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'Project', 
+        required: true 
+    },
+    task_title: { 
+        type: String, 
+        required: true 
+    },
+    start_date: { 
+        type: Date, 
+        required: true 
+    },
+    finish_date: { 
+        type: Date, 
+        required: true 
+    },
+    person_in_charge: { 
+        type: String, 
+        required: true 
+    },
+    created_at: { 
+        type: Date, 
+        default: Date.now 
+    }
+});
+
+module.exports = mongoose.model('Task', TaskSchema);
+
+
+controllers/taskController.js
+
+const Task = require('../models/Task');
+
+// タスク作成
+exports.createTask = async (req, res) => {
+    try {
+        const task = new Task(req.body);
+        await task.save();
+        res.status(201).json(task);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// 全タスク取得
+exports.getTasks = async (req, res) => {
+    try {
+        const tasks = await Task.find();
+        res.json(tasks);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// 特定タスク取得
+exports.getTaskById = async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        res.json(task);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// タスク更新
+exports.updateTask = async (req, res) => {
+    try {
+        const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        res.json(task);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// タスク削除
+exports.deleteTask = async (req, res) => {
+    try {
+        const task = await Task.findByIdAndDelete(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        res.json({ message: 'Task deleted' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+routes/taskRoutes.js
+
+const express = require('express');
+const router = express.Router();
+const taskController = require('../controllers/taskController');
+
+router.post('/', taskController.createTask);
+router.get('/', taskController.getTasks);
+router.get('/:id', taskController.getTaskById);
+router.put('/:id', taskController.updateTask);
+router.delete('/:id', taskController.deleteTask);
+
+module.exports = router;
+
+
+server.jsの修正
+
+const express = require('express');
+const cors = require('cors');
+const connectDB = require('./config/db');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// MongoDB接続
+connectDB();
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// プロジェクトAPI
+app.use('/api/projects', require('./routes/projectRoutes'));
+
+// タスクAPI
+app.use('/api/tasks', require('./routes/taskRoutes'));
+
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});
+
+
+ぽすと
+
+curl -X POST http://localhost:5000/api/tasks \
+-H "Content-Type: application/json" \
+-d '{
+  "project_id": "64a1f9b2c123456789abcdef", 
+  "task_title": "新規タスク",
+  "start_date": "2025-03-01",
+  "finish_date": "2025-03-10",
+  "person_in_charge": "担当者A"
+}'
+
+更新
+
+curl -X PUT http://localhost:5000/api/tasks/{task_id} \
+-H "Content-Type: application/json" \
+-d '{"task_title": "更新されたタスク名"}'
+
+
+
+コレクション構成の改善提案
+1. task コレクションに project_id を追加
+    * 各タスクがどのプロジェクトに属するかを明確にするため。
+    * これにより relation_task_project を不要にできる可能性がある。
+2. relation_tasks の設計見直し
+    * task_id_front と task_id_back のみでは、1つのタスクが複数の前後関係を持つ場合に対応しづらい。
+    * task_id に加えて depends_on (配列) を持たせることで、複数の前後関係を表現しやすくする
