@@ -1,0 +1,306 @@
+// config/db.js
+const mysql = require('mysql2');
+
+const db = mysql.createConnection({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'project_db',
+});
+
+db.connect((err) => {
+    if (err) {
+        console.error('Database connection failed:', err.stack);
+        process.exit(1);
+    }
+    console.log('Connected to MySQL');
+});
+
+module.exports = db;
+
+
+// models/Project.js
+const db = require('../config/db');
+
+// プロジェクトの作成
+const createProject = (data, callback) => {
+    const query = `
+        INSERT INTO projects (project_title, project_content, start_date, end_date, member, status, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    db.query(query, [data.project_title, data.project_content, data.start_date, data.end_date, JSON.stringify(data.member), data.status, data.created_by], (err, result) => {
+        if (err) return callback(err);
+        callback(null, result);
+    });
+};
+
+// プロジェクトの取得
+const getAllProjects = (callback) => {
+    const query = 'SELECT * FROM projects';
+    db.query(query, (err, results) => {
+        if (err) return callback(err);
+        callback(null, results);
+    });
+};
+
+// プロジェクトIDで1つ取得
+const getProjectById = (id, callback) => {
+    const query = 'SELECT * FROM projects WHERE id = ?';
+    db.query(query, [id], (err, result) => {
+        if (err) return callback(err);
+        callback(null, result);
+    });
+};
+
+// プロジェクトの更新
+const updateProject = (id, data, callback) => {
+    const query = `
+        UPDATE projects 
+        SET project_title = ?, project_content = ?, start_date = ?, end_date = ?, member = ?, status = ?, updated_by = ? 
+        WHERE id = ?
+    `;
+    db.query(query, [data.project_title, data.project_content, data.start_date, data.end_date, JSON.stringify(data.member), data.status, data.updated_by, id], (err, result) => {
+        if (err) return callback(err);
+        callback(null, result);
+    });
+};
+
+module.exports = { createProject, getAllProjects, getProjectById, updateProject };
+
+
+
+// models/Task.js
+const db = require('../config/db');
+
+// タスクの作成
+const createTask = (data, callback) => {
+    const query = `
+        INSERT INTO tasks (project_id, task_title, task_content, start_date, end_date, assignee, status, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    db.query(query, [data.project_id, data.task_title, data.task_content, data.start_date, data.end_date, data.assignee, data.status, data.created_by], (err, result) => {
+        if (err) return callback(err);
+        callback(null, result);
+    });
+};
+
+// プロジェクトIDでタスクを取得
+const getTasksByProjectId = (projectId, callback) => {
+    const query = 'SELECT * FROM tasks WHERE project_id = ?';
+    db.query(query, [projectId], (err, results) => {
+        if (err) return callback(err);
+        callback(null, results);
+    });
+};
+
+// タスクIDで1つ取得
+const getTaskById = (id, callback) => {
+    const query = 'SELECT * FROM tasks WHERE id = ?';
+    db.query(query, [id], (err, result) => {
+        if (err) return callback(err);
+        callback(null, result);
+    });
+};
+
+// タスクの更新
+const updateTask = (id, data, callback) => {
+    const query = `
+        UPDATE tasks 
+        SET task_title = ?, task_content = ?, start_date = ?, end_date = ?, assignee = ?, status = ?, updated_by = ? 
+        WHERE id = ?
+    `;
+    db.query(query, [data.task_title, data.task_content, data.start_date, data.end_date, data.assignee, data.status, data.updated_by, id], (err, result) => {
+        if (err) return callback(err);
+        callback(null, result);
+    });
+};
+
+module.exports = { createTask, getTasksByProjectId, getTaskById, updateTask };
+
+
+
+// controllers/projectController.js
+const Project = require('../models/Project');
+
+// プロジェクト作成
+exports.createProject = (req, res) => {
+    const data = req.body;
+    Project.createProject(data, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(201).json(result);
+    });
+};
+
+// 全プロジェクト取得
+exports.fetchAllProjects = (req, res) => {
+    Project.getAllProjects((err, projects) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(projects);
+    });
+};
+
+// プロジェクトIDで取得
+exports.fetchProjectById = (req, res) => {
+    const { projectId } = req.params;
+    Project.getProjectById(projectId, (err, project) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!project.length) return res.status(404).json({ message: 'Project not found' });
+        res.json(project[0]);
+    });
+};
+
+// プロジェクト更新
+exports.updateProject = (req, res) => {
+    const { projectId } = req.params;
+    const data = req.body;
+    Project.updateProject(projectId, data, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Project not found' });
+        res.json({ message: 'Project updated successfully' });
+    });
+};
+
+
+// controllers/taskController.js
+const Task = require('../models/Task');
+
+// タスク作成
+exports.createTask = (req, res) => {
+    const data = req.body;
+    Task.createTask(data, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(201).json(result);
+    });
+};
+
+// プロジェクトIDでタスクを取得
+exports.fetchAllTasks = (req, res) => {
+    const { projectId } = req.params;
+    Task.getTasksByProjectId(projectId, (err, tasks) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(tasks);
+    });
+};
+
+// タスクIDで1つ取得
+exports.fetchTaskById = (req, res) => {
+    const { taskId } = req.params;
+    Task.getTaskById(taskId, (err, task) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!task.length) return res.status(404).json({ message: 'Task not found' });
+        res.json(task[0]);
+    });
+};
+
+// タスク更新
+exports.updateTask = (req, res) => {
+    const { taskId } = req.params;
+    const data = req.body;
+    Task.updateTask(taskId, data, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Task not found' });
+        res.json({ message: 'Task updated successfully' });
+    });
+};
+
+
+// routes/projectRoutes.js
+const express = require('express');
+const router = express.Router();
+const projectController = require('../controllers/projectController');
+
+router.post('/createProject', projectController.createProject);
+router.get('/allProjects', projectController.fetchAllProjects);
+router.get('/:projectId', projectController.fetchProjectById);
+router.put('/updateProject/:projectId', projectController.updateProject);
+
+module.exports = router;
+
+
+// routes/taskRoutes.js
+const express = require('express');
+const router = express.Router();
+const taskController = require('../controllers/taskController');
+
+router.post('/createTask', taskController.createTask);
+router.get('/allTasks/:projectId', taskController.fetchAllTasks);
+router.get('/:taskId', taskController.fetchTaskById);
+router.put('/updateTask/:taskId', taskController.updateTask);
+
+module.exports = router;
+
+
+
+// server.js
+const express = require('express');
+const cors = require('cors');
+const db = require('./config/db');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use('/api/projects', require('./routes/projectRoutes'));
+app.use('/api/tasks', require('./routes/taskRoutes'));
+
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});
+
+
+
+etc/nginx/sites-available/default
+server {
+    listen 80;
+    server_name example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+ああ
+
+/etc/systemd/system/your-app.service というファイルを作成
+sudo nano /etc/systemd/system/your-app.service
+
+[Unit]
+Description=Your Node.js App
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /path/to/your/app/server.js
+WorkingDirectory=/path/to/your/app
+Restart=always
+User=your-user-name
+Group=your-group-name
+Environment=NODE_ENV=production
+Environment=PORT=3000
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=your-app
+
+[Install]
+WantedBy=multi-user.target
+
+sudo systemctl daemon-reload
+sudo systemctl enable your-app.service
+sudo systemctl start your-app.service
+
+sudo journalctl -u your-app.service
+sudo journalctl -u your-app.service -f
+
+
+
+
+
+
+
