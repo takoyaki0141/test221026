@@ -1,0 +1,85 @@
+const db = require('../config/db');
+
+// プロジェクトの作成（Promise化）
+const createProject = (data) => {
+    return new Promise((resolve, reject) => {
+        const query = `
+            INSERT INTO project (
+                project_id,
+                project_title, 
+                project_content, 
+                start_date, 
+                end_date, 
+                status_id, 
+                ins_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
+        db.query(query, [data.project_id, data.project_title, data.project_content, data.start_date, data.end_date, data.status_id, data.ins_by], (err, result) => {
+            if (err) return reject(err);
+            resolve(result);
+        });
+    });
+};
+
+// プロジェクトに紐づくメンバーの登録（Promise化）
+const registerProjectMember = (data) => {
+    return new Promise((resolve, reject) => {
+        const userIdArray = data.user_id_array;
+        if (userIdArray.length === 0) return resolve({ message: "No user_id to register" });
+
+        const values = userIdArray.map(user_id => [data.project_id, user_id]);
+
+        const query = `
+            INSERT INTO project_member (project_id, user_id) VALUES ?
+        `;
+        db.query(query, [values], (err, result) => {
+            if (err) return reject(err);
+            resolve(result);
+        });
+    });
+};
+
+module.exports = { createProject, registerProjectMember };
+
+
+ああ
+
+const db = require('../config/db');
+const Project = require('../models/Project');
+
+// プロジェクト作成（トランザクション対応）
+exports.createProject = async (req, res) => {
+    const data = req.body;
+    
+    // トランザクション開始
+    const connection = await new Promise((resolve, reject) => {
+        db.getConnection((err, conn) => {
+            if (err) return reject(err);
+            resolve(conn);
+        });
+    });
+
+    try {
+        await new Promise((resolve, reject) => connection.beginTransaction(err => err ? reject(err) : resolve()));
+
+        // プロジェクト作成
+        await Project.createProject(data);
+
+        // メンバー登録（user_id_arrayが空でなければ）
+        if (data.user_id_array.length > 0) {
+            await Project.registerProjectMember(data);
+        }
+
+        // コミット（成功時）
+        await new Promise((resolve, reject) => connection.commit(err => err ? reject(err) : resolve()));
+
+        res.status(201).json({ message: "Project created successfully" });
+    } catch (error) {
+        // ロールバック（エラー発生時）
+        await new Promise((resolve, reject) => connection.rollback(err => err ? reject(err) : resolve()));
+        res.status(500).json({ error: error.message });
+    } finally {
+        // コネクション解放
+        connection.release();
+    }
+};
