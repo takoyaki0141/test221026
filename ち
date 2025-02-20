@@ -1,0 +1,75 @@
+const db = require('../config/db');
+const Project = require('../models/Project');
+
+// プロジェクト作成（async/awaitを最大限活用）
+exports.createProject = async (req, res) => {
+    const data = req.body;
+
+    let connection;
+    try {
+        // トランザクションを管理するコネクションを取得
+        connection = await db.promise().getConnection();
+        await connection.beginTransaction();
+
+        // プロジェクト作成
+        await Project.createProject(data);
+
+        // メンバー登録（user_id_arrayが空でなければ）
+        if (data.user_id_array.length > 0) {
+            await Project.registerProjectMember(data);
+        }
+
+        // コミット（成功時）
+        await connection.commit();
+        res.status(201).json({ message: "Project created successfully" });
+
+    } catch (error) {
+        // ロールバック（エラー発生時）
+        if (connection) await connection.rollback();
+        res.status(500).json({ error: error.message });
+
+    } finally {
+        // コネクション解放
+        if (connection) connection.release();
+    }
+};
+
+
+
+const db = require('../config/db');
+
+// プロジェクトの作成
+const createProject = async (data) => {
+    const query = `
+        INSERT INTO project (
+            project_id,
+            project_title, 
+            project_content, 
+            start_date, 
+            end_date, 
+            status_id, 
+            ins_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    const [result] = await db.promise().query(query, [
+        data.project_id, data.project_title, data.project_content, 
+        data.start_date, data.end_date, data.status_id, data.ins_by
+    ]);
+    return result;
+};
+
+// プロジェクトに紐づくメンバーの登録
+const registerProjectMember = async (data) => {
+    if (data.user_id_array.length === 0) {
+        return { message: "No user_id to register" };
+    }
+
+    const values = data.user_id_array.map(user_id => [data.project_id, user_id]);
+    const query = `INSERT INTO project_member (project_id, user_id) VALUES ?`;
+
+    const [result] = await db.promise().query(query, [values]);
+    return result;
+};
+
+module.exports = { createProject, registerProjectMember };
+
