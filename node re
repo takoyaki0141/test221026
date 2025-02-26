@@ -1,0 +1,154 @@
+const express = require('express');
+const cors = require('cors');
+const session = require('express-session');
+require('dotenv').config(); // .env の読み込み
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// ルーティングの読み込み
+const router = require('./router');
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// セッション設定（HTTPS利用時は cookie.secure を true にする）
+app.set('trust proxy', 1);
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'default_secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false }
+}));
+
+// view engine の設定（Pug を利用）
+app.set('view engine', 'pug');
+
+// ルーティングを適用
+app.use(router);
+
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});
+
+
+
+
+router
+
+const express = require('express');
+const router = express.Router();
+
+// 各種ルートの読み込み（必要に応じて）
+const projectRoutes = require('./routes/projectRoutes');
+const taskRoutes = require('./routes/taskRoutes');
+
+// ログインチェック関数とログイン処理関数の読み込み
+const { loginCheck, handleLoginCheck } = require('./loginCheck');
+
+// メインページ（ログイン済みの場合のみ表示）
+router.get('/mainTest', loginCheck, (req, res) => {
+    res.render('mainTest', { u_id: req.session.u_id, u_name: req.session.u_name });
+});
+
+// ログイン処理用のエンドポイント
+router.get('/login_check', async (req, res) => {
+    await handleLoginCheck(req, res);
+});
+
+// APIルートはログインチェックをミドルウェアとして適用
+router.use('/api/project', loginCheck, projectRoutes);
+router.use('/api/task', loginCheck, taskRoutes);
+
+module.exports = router;
+
+
+
+logincheck
+
+const fetch = require("node-fetch");
+
+const authClientId = process.env.LOGIN_AUTH_CLIENT_ID;
+const secretKey = process.env.LOGIN_SECRET_KEY;
+const LOGIN_URL = `https://dauthenticator.discojpn.com/api/user/authcheck?clientId=${authClientId}`;
+const userInfoUrl = "https://dauthenticator.discojpn.com/api/user/userInfo";
+
+if (!authClientId || !secretKey) {
+    console.error("Error: LOGIN_AUTH_CLIENT_ID or LOGIN_SECRET_KEY is not set.");
+    process.exit(1);
+}
+
+// ログイン状態チェック（セッションにユーザー情報が存在するか）
+const sessionCheck = (req) => {
+    return req.session.u_name !== undefined && req.session.u_name !== "";
+};
+
+// ログインチェックミドルウェア
+const loginCheck = async (req, res, next) => {
+    if (sessionCheck(req)) {
+        console.log("ログイン済み");
+        req.session.url = ""; // 念のためクリア
+        return next();
+    } else {
+        console.log("未ログイン、認証ページへリダイレクト");
+        req.session.url = req.originalUrl; // アクセスされたURLを記録
+        return res.redirect(LOGIN_URL);
+    }
+};
+
+// アクセストークンを用いてログイン処理を行う
+const handleLoginCheck = async (req, res) => {
+    const accessToken = req.query.accessToken;
+    if (!accessToken) return res.status(400).send("No accessToken provided");
+
+    const userInfo = await getAccount(accessToken);
+    if (!userInfo) return res.status(401).send("Failed to get user information");
+
+    req.session.u_id = userInfo.userId;
+    req.session.u_name = userInfo.user.name;
+    console.log("ログイン成功:", req.session.u_id, req.session.u_name);
+
+    res.redirect("/mainTest");
+};
+
+// アクセストークンを用いてユーザー情報を取得
+const getAccount = async (accessToken) => {
+    const postContent = {
+        clientId: authClientId,
+        secret: secretKey,
+        accessToken
+    };
+
+    try {
+        const response = await fetch(userInfoUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(postContent)
+        });
+
+        if (!response.ok) {
+            console.log("アクセストークンのPOSTエラー", response.statusText);
+            return null;
+        }
+        return await response.json();
+    } catch (err) {
+        console.error("APIエラー", err);
+        return null;
+    }
+};
+
+module.exports = { loginCheck, handleLoginCheck };
+
+
+
+補足
+環境変数
+.env ファイルを利用して、LOGIN_AUTH_CLIENT_ID、LOGIN_SECRET_KEY、および SESSION_SECRET を設定してください。
+ルーティングの拡張
+プロジェクト固有のルート（projectRoutes、taskRoutes など）は、各自のファイル内で実装してください。
+
+
+
+
+
