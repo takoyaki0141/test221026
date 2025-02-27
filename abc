@@ -15,10 +15,116 @@ foreach ($data as $entry) {
 }
 
 
+private function writeLog($sql, $params)
+{
+    $userId = $_SESSION["u_id"];
+    $logPath = '../log/sqllog.log';
+
+    // ログ内容を一括で作成
+    $logData = sprintf(
+        "[%s]\nid: %s\n%s\n%s\n\n",
+        date("Y/m/d H:i:s"),
+        $userId,
+        $sql,
+        !empty($params) ? implode("\n", $params) : "No Parameters"
+    );
+
+    // まとめてファイルに書き込む
+    file_put_contents($logPath, $logData, FILE_APPEND | LOCK_EX);
+}
+
+
+
+public function showRecentProject($fetch_date) {
+    try {
+        $userId = $_SESSION["u_id"];
+        $loginedUser = [':user_id' => $userId, ':fetch_date' => $fetch_date];
+
+        // 日ごとのプロジェクトの更新日を取得
+        $sql = "
+            SELECT DATE_FORMAT(`upd_date`, '%Y-%m-%d') as `grouped_date`
+            FROM project
+            WHERE `upd_date` > (NOW() - INTERVAL :fetch_date DAY)
+            AND (client_id = :user_id OR contractor_id = :user_id)
+            GROUP BY `grouped_date`
+            ORDER BY `upd_date` DESC
+        ";
+
+        $stmt = $this->dbh->prepare($sql);
+        $stmt->execute($loginedUser);
+        $date_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($date_list as $index => $date) {
+            $groupedByDateSql = "
+                SELECT 
+                    project.*, progress.progress_name
+                FROM project 
+                LEFT JOIN progress ON project.progress_id = progress.progress_id
+                WHERE (client_id = :user_id OR contractor_id = :user_id)
+                AND DATE_FORMAT(`upd_date`, '%Y-%m-%d') = :grouped_date
+                ORDER BY `upd_date` DESC
+            ";
+
+            $stmt = $this->dbh->prepare($groupedByDateSql);
+            $stmt->execute([':user_id' => $userId, ':grouped_date' => $date["grouped_date"]]);
+            $dateProjectList = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($dateProjectList as $mil_index => $project) {
+                $projectId = $project["project_id"];
+
+                // マイルストーンの集計を1回のクエリで取得
+                $milestone_sql = "
+                    SELECT 
+                        SUM(CASE WHEN progress_id != 7 THEN 1 ELSE 0 END) AS milestone_sum,
+                        SUM(CASE WHEN progress_id = 5 THEN 1 ELSE 0 END) AS milestone_fin
+                    FROM milestone
+                    WHERE project_id = :project_id
+                ";
+
+                $stmt = $this->dbh->prepare($milestone_sql);
+                $stmt->execute([':project_id' => $projectId]);
+                $milestoneData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                $dateProjectList[$mil_index]["milestone_sum"] = $milestoneData["milestone_sum"] ?? 0;
+                $dateProjectList[$mil_index]["milestone_fin"] = $milestoneData["milestone_fin"] ?? 0;
+
+                // 役割の判定
+                $dateProjectList[$mil_index]["position"] = $this->determineUserPosition($userId, $project);
+            }
+
+            $date_list[$index]["project_list"] = $dateProjectList;
+        }
+
+        return $date_list;
+    } catch (PDOException $e) {
+        return ["status" => "error", "message" => "fail to fetch the projects. " . $e->getMessage()];
+    }
+}
+
+/**
+ * ユーザーの役割を判定する関数
+ */
+private function determineUserPosition($userId, $project) {
+    if ($userId == $project["contractor_id"] && $userId == $project["client_id"]) {
+        return "both";
+    } elseif ($userId == $project["contractor_id"]) {
+        return "contractor";
+    } elseif ($userId == $project["client_id"]) {
+        return "client";
+    }
+    return "error";
+}
 
 
 
 
+
+
+
+
+
+
+、、、
 
 
 
