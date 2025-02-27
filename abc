@@ -1,3 +1,57 @@
+<?php
+function countProjects($data) {
+    $result = [];
+
+    foreach ($data as $user_id => $roles) {
+        foreach ($roles as $role => $projects) {
+            $delay_count = 0;
+            $close_count = 0;
+
+            foreach ($projects as $project) {
+                $remaining_days = $project['remaining_days'];
+
+                if ($remaining_days < 0) {
+                    $delay_count++;
+                } elseif ($remaining_days >= 0 && $remaining_days <= 7) {
+                    $close_count++;
+                }
+            }
+
+            $result[$user_id][$role] = [
+                "delay_projects_num" => $delay_count,
+                "close_projects_num" => $close_count
+            ];
+        }
+    }
+
+    return $result;
+}
+
+// 例として、あなたのデータを仮の変数に格納
+$data = [
+    // ここに元の配列データを入れる
+];
+
+// 結果を計算
+$project_counts = countProjects($data);
+
+// 結果を表示
+print_r($project_counts);
+?>
+
+
+
+
+ああ
+
+
+
+
+
+
+
+
+
 $result = [];
 
 foreach ($data as $entry) {
