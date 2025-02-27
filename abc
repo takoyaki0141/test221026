@@ -1,3 +1,27 @@
+$result = [];
+
+foreach ($data as $entry) {
+    $contractor_id = $entry["contractor_id"];
+    
+    // 必要な情報のみ抽出
+    $project_info = [
+        "client_name"  => $entry["client_name"],
+        "project_name" => $entry["project_name"],
+        "due_date"     => $entry["due_date"]
+    ];
+
+    // `contractor_id` をキーとしてデータを格納
+    $result[$contractor_id][] = $project_info;
+}
+
+
+
+
+
+
+
+
+
 
 public function showStatistic($userId) {
     try {
