@@ -1,0 +1,186 @@
+const express = require("express");
+const session = require("express-session");
+const cors = require("cors");
+
+const app = express();
+
+// CORS 設定（セッションを含める）
+app.use(cors({
+    origin: "http://localhost:5173", // ReactのURL
+    credentials: true
+}));
+
+// セッション設定
+app.use(session({
+    secret: "your_secret_key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false } // ローカル環境では false、本番環境では true + HTTPS 必須
+}));
+
+// JSONリクエストの解析
+app.use(express.json());
+
+// ルーター設定
+const router = require("./routes");
+app.use(router);
+
+const PORT = 5000;
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});
+
+あ
+
+const express = require("express");
+const router = express.Router();
+
+// ルート読み込み
+const projectRoutes = require("./projectRoutes");
+const taskRoutes = require("./taskRoutes");
+
+// ログインチェック関数とログイン処理関数読み込み
+const { loginCheck, handleLoginCheck } = require("../loginCheck");
+
+// ログインチェックAPI
+router.get("/logincheck", loginCheck);
+
+// APIルート
+router.use("/api/project", projectRoutes);
+router.use("/api/task", taskRoutes);
+
+module.exports = router;
+
+const authClientId = process.env.LOGIN_AUTH_CLIENT_ID;
+const secretKey = process.env.LOGIN_SECRET_KEY;
+const LOGIN_URL = `https://dauthenticator.discojpn.com/api/user/authcheck?clientId=${authClientId}`;
+const userInfoUrl = "https://dauthenticator.discojpn.com/api/user/userInfo";
+
+// 環境変数チェック
+if (!authClientId) {
+    console.error("LOGIN_AUTH_CLIENT_ID is not set.");
+    process.exit(1);
+}
+if (!secretKey) {
+    console.error("LOGIN_SECRET_KEY is not set.");
+    process.exit(1);
+}
+
+// ログイン状態チェック（セッションにユーザー情報が存在するか）
+const sessionCheck = (req) => {
+    return req.session.u_name !== undefined && req.session.u_name !== "";
+};
+
+// ログインチェックミドルウェア
+const loginCheck = async (req, res, next) => {
+    if (sessionCheck(req)) {
+        console.log("ログイン済み");
+        req.session.url = ""; // 念のためクリア
+        return res.json({ loggedIn: true, userId: req.session.u_id, userName: req.session.u_name });
+    } else {
+        console.log("未ログイン、認証ページへリダイレクト");
+        req.session.url = req.originalUrl; // アクセスしたURLをセッションに保存
+        return res.json({ loggedIn: false, redirectUrl: LOGIN_URL });
+    }
+};
+
+// アクセストークンを用いてログイン処理を行う
+const handleLoginCheck = async (req, res) => {
+    const accessToken = req.query.accessToken;
+    if (!accessToken) return res.status(400).json({ error: "No accessToken provided" });
+
+    const userInfo = await getAccount(accessToken);
+    if (!userInfo) return res.status(401).json({ error: "Failed to get user information" });
+
+    req.session.u_id = userInfo.userId;
+    req.session.u_name = userInfo.user.name;
+    console.log("ログイン成功:", req.session.u_id, req.session.u_name);
+
+    // ログイン前にアクセスしたURL（セッションに保存されたURL）にリダイレクト
+    const redirectUrl = req.session.url || "http://localhost:5173";
+    res.redirect(redirectUrl);
+};
+
+// アクセストークンを用いてユーザー情報を取得
+const getAccount = async (accessToken) => {
+    const postContent = {
+        clientId: authClientId,
+        secret: secretKey,
+        accessToken
+    };
+
+    try {
+        const response = await fetch(userInfoUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(postContent)
+        });
+
+        if (!response.ok) {
+            console.log("アクセストークンPOSTエラー", response.statusText);
+            return null;
+        }
+        return await response.json();
+    } catch (err) {
+        console.error("APIエラー", err);
+        return null;
+    }
+};
+
+module.exports = { loginCheck, handleLoginCheck };
+
+
+
+あ
+import { useEffect } from "react";
+
+function NodeMain() {
+  useEffect(() => {
+    loginCheck();
+    getData();
+  }, []);
+
+  async function loginCheck() {
+    const url = "http://localhost:5000/logincheck";
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+        credentials: "include", // セッション情報を送信
+      });
+      const json = await response.json();
+      console.log(json);
+
+      if (!json.loggedIn) {
+        // 未ログインならリダイレクト
+        window.location.href = json.redirectUrl;
+      }
+    } catch (error) {
+      console.error("ログインチェックエラー:", error);
+    }
+  }
+
+  async function getData() {
+    const url = "http://localhost:5000/api/project/allProjects";
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include", // セッション情報を送信
+      });
+      const json = await response.json();
+      console.log(json);
+    } catch (error) {
+      console.error("データ取得エラー:", error);
+    }
+  }
+
+  return (
+    <>
+      <div className="text-3xl">Node Page</div>
+    </>
+  );
+}
+
+export default NodeMain;
+
+
