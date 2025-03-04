@@ -1,0 +1,185 @@
+document.addEventListener("DOMContentLoaded", () => {
+    M.Modal.init(document.querySelectorAll(".modal")); // Materialize モーダル初期化
+});
+
+const confirmModal = M.Modal.getInstance(document.getElementById("confirmModal"));
+const resultModal = M.Modal.getInstance(document.getElementById("resultModal"));
+const confirmMessage = document.getElementById("confirmMessage");
+const confirmBtn = document.getElementById("confirmBtn");
+const closeResultBtn = document.getElementById("closeResultBtn");
+
+// ボタンのイベントリスナーを登録
+document.getElementById("graduateMemBtn").addEventListener("click", () => {
+    showConfirmModal(`${member.user_id} を卒業済みにしてよいですか？`, () => updateMemberStatus(member.user_id, 0));
+});
+
+document.getElementById("deleteMemBtn").addEventListener("click", () => {
+    showConfirmModal(`${member.user_id} を削除してよいですか？`, () => deleteMember(member.user_id));
+});
+
+/**
+ * 確認モーダルを表示し、OKが押されたら処理を実行
+ * @param {string} message - 確認メッセージ
+ * @param {Function} onConfirm - OKボタン押下時の処理
+ */
+const showConfirmModal = (message, onConfirm) => {
+    confirmMessage.textContent = message;
+    confirmModal.open();
+
+    // 前のリスナーを削除して、新しく登録
+    confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+    document.getElementById("confirmBtn").addEventListener("click", async () => {
+        confirmModal.close();
+        await onConfirm();
+    });
+};
+
+/**
+ * API通信を行い、結果をモーダル表示
+ * @param {string} url - APIエンドポイント
+ * @param {Object} data - リクエストデータ
+ * @param {string} successMessage - 成功時のメッセージ
+ */
+const fetchData = async (url, data, successMessage) => {
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) throw new Error("サーバーエラーが発生しました");
+
+        showResultModal("成功", successMessage, true);
+    } catch (error) {
+        console.error(error);
+        showResultModal("エラー", error.message || "エラーが発生しました", false);
+    }
+};
+
+/**
+ * メンバーの状態を更新
+ * @param {string} userId - ユーザーID
+ * @param {number} type - 更新するステータス
+ */
+const updateMemberStatus = async (userId, type) => {
+    await fetchData("../api/api.php?action=updateMemberStatus", { user_id: userId, type }, "状態が更新されました");
+};
+
+/**
+ * メンバーを削除
+ * @param {string} userId - ユーザーID
+ */
+const deleteMember = async (userId) => {
+    await fetchData("../api/api.php?action=deleteMember", { user_id: userId }, "メンバーを削除しました");
+};
+
+/**
+ * 成功・エラーモーダルを表示
+ * @param {string} title - モーダルのタイトル
+ * @param {string} message - 表示するメッセージ
+ * @param {boolean} shouldReload - 成功時にページをリロードするか
+ */
+const showResultModal = (title, message, shouldReload) => {
+    document.getElementById("resultTitle").textContent = title;
+    document.getElementById("resultMessage").textContent = message;
+    resultModal.open();
+
+    if (shouldReload) {
+        closeResultBtn.addEventListener("click", () => {
+            sessionStorage.setItem("scrollPosition", window.scrollY);
+            location.reload();
+        }, { once: true });
+    }
+};
+
+// ページリロード後にスクロール位置を復元
+window.addEventListener("load", () => {
+    const scrollPos = sessionStorage.getItem("scrollPosition");
+    if (scrollPos) {
+        window.scrollTo(0, scrollPos);
+        sessionStorage.removeItem("scrollPosition");
+    }
+});
+
+
+
+
+
+<!-- 確認モーダル -->
+<div id="confirmModal" class="modal">
+    <div class="modal-content">
+        <h5>確認</h5>
+        <p id="confirmMessage"></p>
+    </div>
+    <div class="modal-footer">
+        <button class="modal-close waves-effect btn grey">キャンセル</button>
+        <button id="confirmBtn" class="waves-effect btn blue">OK</button>
+    </div>
+</div>
+
+<!-- 結果モーダル -->
+<div id="resultModal" class="modal">
+    <div class="modal-content">
+        <h5 id="resultTitle"></h5>
+        <p id="resultMessage"></p>
+    </div>
+    <div class="modal-footer">
+        <button id="closeResultBtn" class="modal-close waves-effect btn blue">閉じる</button>
+    </div>
+</div>
+
+
+あたああ
+
+
+<header class="material_header grey darken-3 white-text fixed-header">
+    <div class="material_menu_icon">
+        <a href="#" data-target="side_bar" class="sidenav-trigger white-text">
+            <i class="material-icons">menu</i>
+        </a>
+    </div>
+    <div class="material_title">
+        <img src="../common/img/icon/web_icon.png" alt="icon" class="header-icon">
+        <span class="header-title">Mid Career APU Personal History</span>
+    </div>
+</header>
+
+
+
+.fixed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;  /* 固定の高さ */
+    padding: 0 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.material_menu_icon {
+    display: flex;
+    align-items: center;
+}
+
+.material_title {
+    display: flex;
+    align-items: center;
+    gap: 8px;  /* アイコンとテキストの間隔 */
+    flex-grow: 1;
+    justify-content: center;
+}
+
+.header-icon {
+    height: 32px;
+    width: auto;
+}
+
+.header-title {
+    font-size: 15px;
+    white-space: nowrap;
+}
+
+
+
+
+
