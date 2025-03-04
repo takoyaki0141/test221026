@@ -1,0 +1,111 @@
+const db = require("../config/db");
+
+// プロジェクトのメンバー取得
+const getProjectMembers = async (projectId) => {
+    const [members] = await db.promise().query(`
+        SELECT user_id, is_deleted FROM project_member WHERE project_id = ?;
+    `, [projectId]);
+    return members;
+};
+
+// プロジェクトのメンバー削除（is_deleted = 1）
+const deleteProjectMembers = async (projectId, idsToDelete) => {
+    if (idsToDelete.length === 0) return;
+    await db.promise().query(`
+        UPDATE project_member SET is_deleted = 1 
+        WHERE project_id = ? AND user_id IN (?);
+    `, [projectId, idsToDelete]);
+};
+
+// プロジェクトのメンバー復活（is_deleted = 0）
+const restoreProjectMembers = async (projectId, idsToUpdate) => {
+    if (idsToUpdate.length === 0) return;
+    await db.promise().query(`
+        UPDATE project_member SET is_deleted = 0 
+        WHERE project_id = ? AND user_id IN (?);
+    `, [projectId, idsToUpdate]);
+};
+
+// 新規メンバー追加
+const addProjectMember = async (projectId, userId) => {
+    await db.promise().query(`
+        INSERT INTO project_member (project_id, user_id, is_deleted) 
+        VALUES (?, ?, 0);
+    `, [projectId, userId]);
+};
+
+// プロジェクトメンバーの更新処理（メイン関数）
+const upsertProjectMember = async (data, projectId) => {
+    if (data.user_id_array.length === 0) {
+        return { message: "No user_id to register" };
+    }
+
+    // 現在のメンバー取得
+    const currentMembers = await getProjectMembers(projectId);
+    const currentUserIds = currentMembers.map(member => member.user_id);
+    const newUserIds = data.user_id_array;
+
+    // is_deleted = 1 にするメンバー
+    const idsToDelete = currentUserIds.filter(id => !newUserIds.includes(id));
+    // is_deleted = 0 にするメンバー
+    const idsToUpdate = newUserIds.filter(id => currentUserIds.includes(id));
+
+    // 削除と復活を処理
+    await deleteProjectMembers(projectId, idsToDelete);
+    await restoreProjectMembers(projectId, idsToUpdate);
+
+    // 新規メンバー追加
+    for (const userId of newUserIds) {
+        if (!currentUserIds.includes(userId)) {
+            await addProjectMember(projectId, userId);
+        }
+    }
+
+    return { message: "Project members updated successfully" };
+};
+
+module.exports = {
+    getProjectMembers,
+    deleteProjectMembers,
+    restoreProjectMembers,
+    addProjectMember,
+    upsertProjectMember
+};
+
+
+
+
+
+
+
+こんとろー
+
+const Project = require("../models/Project");
+
+exports.updateProject = async (req, res) => {
+    try {
+        const projectId = req.params.projectId;
+        const data = req.body;
+
+        if (!data.project_title || !data.project_content || !data.start_date || 
+            !data.end_date || !data.status_id || !data.upd_by || !projectId) {
+            return res.status(400).json({ error: "データが不足しています" });
+        }
+
+        // プロジェクト情報を更新
+        await Project.updateProject(data, projectId);
+
+        // メンバー更新
+        if (Array.isArray(data.user_id_array) && data.user_id_array.length > 0) {
+            await Project.upsertProjectMember(data, projectId);
+        }
+
+        return res.status(200).json({ message: "Project updated successfully" });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
+
+
