@@ -1,0 +1,198 @@
+<section id="one_min_quiz" class="scrollspy p_relative">
+    <div class="mt_5 px_4 mb_5">
+        <blockquote>
+            <h5>一分動画</h5>
+        </blockquote>
+
+        <div id="quiz-container">
+            <!-- ここにJSで複数のクイズセットが追加される -->
+        </div>
+    </div>
+</section>
+
+const fetchOneMinQuiz = (userId) => {
+    fetch("../api/api.php?action=fetchOneMinQuiz&user_id=" + userId)
+    .then(res => res.json())
+    .then(res => {
+        // 表示エリアを取得してクリア
+        const oneMinQuizArea = document.getElementById("one_min_quiz");
+        oneMinQuizArea.innerHTML = "";
+
+        res.forEach(quizData => {
+            const quizItem = createQuizItem(quizData);
+            oneMinQuizArea.appendChild(quizItem);
+        });
+
+        // Materializeのcollapsibleを初期化（必要なら）
+        M.Collapsible.init(document.querySelectorAll(".collapsible"));
+    })
+    .catch(err => console.error(err));
+};
+
+/**
+ * クイズデータのセットを作成する
+ */
+const createQuizItem = (quizData) => {
+    const quizItem = document.createElement("div");
+    quizItem.className = "quiz-item mb_5 px_4";
+
+    // 各要素を作成して追加
+    const videoElement = createVideoElement(quizData);
+    const quizContent = createQuizContent(quizData);
+
+    quizItem.appendChild(videoElement);
+    quizItem.appendChild(quizContent);
+
+    return quizItem;
+};
+
+/**
+ * 動画エリアを作成
+ */
+const createVideoElement = (quizData) => {
+    const videoContainer = document.createElement("div");
+    videoContainer.className = "item_sm_50";
+
+    const videoTitle = document.createElement("div");
+    videoTitle.className = "mb_2 text_center";
+    videoTitle.textContent = "エビデンス動画";
+
+    const dTubeIframe = document.createElement("iframe");
+    dTubeIframe.className = "w_100";
+    dTubeIframe.width = "640";
+    dTubeIframe.height = "250";
+    dTubeIframe.scrolling = "no";
+    dTubeIframe.frameBorder = "no";
+    dTubeIframe.src = `http://dtube/dtube/Access.php?action=views_embed_movie&movie_id=${quizData["quiz_id"]}=&size=auto`;
+
+    videoContainer.appendChild(videoTitle);
+    videoContainer.appendChild(dTubeIframe);
+
+    return videoContainer;
+};
+
+/**
+ * クイズ内容エリアを作成
+ */
+const createQuizContent = (quizData) => {
+    const quizContentContainer = document.createElement("div");
+    quizContentContainer.className = "item_sm_50";
+
+    const quizTitle = document.createElement("div");
+    quizTitle.className = "mb_2 text_center";
+    quizTitle.textContent = "クイズ内容";
+
+    const quizDetail = document.createElement("div");
+    quizDetail.className = "px_2 mb_4 pre_line";
+    quizDetail.textContent = quizData["quiz_detail"];
+
+    // 回答エリアを作成して追加
+    const quizAnswer = createAnswerSection(quizData);
+
+    quizContentContainer.appendChild(quizTitle);
+    quizContentContainer.appendChild(quizDetail);
+    quizContentContainer.appendChild(quizAnswer);
+
+    return quizContentContainer;
+};
+
+/**
+ * 回答エリアを作成
+ */
+const createAnswerSection = (quizData) => {
+    const quizAnswerArea = document.createElement("ul");
+    quizAnswerArea.className = "collapsible";
+    quizAnswerArea.style.border = "none";
+
+    const listItem = document.createElement("li");
+
+    const header = document.createElement("div");
+    header.className = "collapsible-header grey darken-4 jcc";
+    header.setAttribute("tabindex", "0");
+
+    const button = document.createElement("div");
+    button.className = "btn waves-effect waves-light";
+    button.innerHTML = '<i class="material-icons left">pageview</i> 回答を表示';
+
+    header.appendChild(button);
+
+    const body = document.createElement("span");
+    body.className = "collapsible-body";
+    const answerDiv = document.createElement("div");
+    answerDiv.className = "px_2 mb_4 pre_line";
+    answerDiv.textContent = quizData["quiz_answer"];
+
+    body.appendChild(answerDiv);
+    listItem.appendChild(header);
+    listItem.appendChild(body);
+    quizAnswerArea.appendChild(listItem);
+
+    return quizAnswerArea;
+};
+
+// データ取得を実行
+fetchOneMinQuiz(12345);
+
+
+
+
+
+
+
+
+
+
+
+おけ
+
+
+document.addEventListener('DOMContentLoaded', function() {
+    // スクロールスパイの初期化
+    let elems = document.querySelectorAll('.scrollspy');
+    let instances = M.ScrollSpy.init(elems, {
+        throttle: 15,
+        scrollOffset: 200,
+    });
+
+    // 社員番号入力欄とメインコンテンツ
+    const searchMemberInput = document.getElementById("search-member-input");
+    const searchMemberArea = document.getElementById("search-member-area");
+    const mainContent = document.getElementById("main-content");
+
+    // 現在のURLのクエリパラメータを取得
+    let url = new URL(window.location.href);
+    let params = url.searchParams;
+    let getMemberId = params.get('user_id');
+
+    // クエリに社員番号があるかどうかで表示を切り替え
+    if (getMemberId) {
+        searchMemberArea.style.display = 'none';
+        mainContent.style.display = '';
+    } else {
+        // 戻るボタン対応: クエリがない場合は入力フォームを表示
+        searchMemberArea.style.display = 'flex';
+        mainContent.style.display = 'none';
+    }
+
+    // 社員番号入力時の動作
+    searchMemberInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            let searchMemberId = e.target.value.trim();
+
+            if (!searchMemberId) return;
+
+            // 検索フォームを非表示に
+            searchMemberArea.style.display = "none";
+
+            // URLに user_id を追加
+            let newUrl = new URL(window.location.href);
+            newUrl.searchParams.set("user_id", searchMemberId);
+
+            // 遷移
+            location.href = newUrl;
+        }
+    });
+});
+
+
